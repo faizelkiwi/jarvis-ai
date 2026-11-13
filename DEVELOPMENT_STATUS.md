@@ -67,14 +67,14 @@ Legend: ✅ implemented & tested · 🟡 implemented, partially verified · 🔲
 - 🔲 Load testing; external penetration test
 
 ### Phase 8 — Deployment 🟡
-- ✅ Production build, `vercel.json` cron, standalone worker, migration script, `.env.example`, deployment guide (README)
+- ✅ Production build, cron endpoint for external schedulers, standalone worker, migration script, `.env.example`, deployment guide (README)
 - 🔲 Actual Supabase/Vercel deployment and domain — needs your accounts
 - 🔲 GitHub repository — the code is committed locally; needs a remote you own
 
 ## Known issues & limitations
 1. Live AI output has not been observed yet (see verification summary).
 2. Agent progress is polled every 2 s (no token streaming to the UI yet).
-3. On Vercel without a separate worker, task start latency is up to 1 minute (cron granularity).
+3. On Vercel without a separate worker, task start latency is up to 1 minute (external scheduler granularity).
 4. Embedded PGlite is single-process: use Postgres (`DATABASE_URL`) whenever running a separate worker.
 5. In-app notifications only; Telegram/email notification delivery not wired yet.
 6. PWA: manifest present (installable on most browsers); no service worker / offline mode.

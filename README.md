@@ -54,7 +54,7 @@ Open http://localhost:3000. The first account you register becomes the **owner**
    - `JARVIS_INPROCESS_WORKER=false`
 4. **Background worker** — choose one:
    - **Recommended:** run `npm run worker` on an always-on host (Railway, Render, Fly.io) with the same `DATABASE_URL` and `JARVIS_ENCRYPTION_KEY`. Agents start within ~2 seconds.
-   - **Vercel-only:** `vercel.json` schedules `/api/cron/worker` every minute (requires a Vercel plan that allows per-minute crons). Tasks then start within a minute.
+   - **Vercel-only (free):** have an external scheduler such as cron-job.org call `GET https://YOUR-APP/api/cron/worker` every minute with the header `Authorization: Bearer <CRON_SECRET>`. Tasks then start within a minute. (Vercel's own Cron also works on plans that allow per-minute schedules.)
 5. **Domain:** add it in Vercel → *Domains*. HTTPS is automatic.
 6. **Backups:** enable Supabase point-in-time recovery; owners can also download a JSON export in *Settings → Data & backup*.
 7. **Monitoring:** *Settings → System health* shows database, worker heartbeat, failed jobs, integration status, token use and estimated cost. Add Vercel/Supabase alerting for uptime.
