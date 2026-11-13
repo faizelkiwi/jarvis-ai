@@ -182,7 +182,7 @@ export function Shell({ user, counts: initial, demo, aiReady, children }: { user
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur pt-[env(safe-area-inset-top)]">
           <div className="flex h-14 items-center gap-2 px-3 sm:px-5">
             <button className="lg:hidden p-2 -ml-1 text-muted" onClick={() => setDrawer(true)} aria-label="Open menu">
               <Menu className="size-5" />

@@ -10,10 +10,11 @@ export const metadata: Metadata = {
   title: "JARVIS AI",
   description: "Your Business. Your Intelligence. Your Control.",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }, { url: "/icon-192.png", sizes: "192x192" }], apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "JARVIS", statusBarStyle: "black-translucent" },
 };
 
-export const viewport: Viewport = { themeColor: "#040a15", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#040a15", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 const themeScript = `try{var t=localStorage.getItem('jarvis-theme');if(!t){t='dark'}document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='dark'}`;
 
