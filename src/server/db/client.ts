@@ -32,6 +32,9 @@ async function init(): Promise<DbState> {
     return { db, close: () => pool.end(), driver: "postgres" };
   }
 
+  if (process.env.VERCEL) {
+    throw new Error("DATABASE_URL is not set. Add your Supabase connection string in the hosting environment variables and redeploy.");
+  }
   // Embedded Postgres (PGlite) — local development & tests.
   const { PGlite } = await import("@electric-sql/pglite");
   const { vector } = await import("@electric-sql/pglite-pgvector");
