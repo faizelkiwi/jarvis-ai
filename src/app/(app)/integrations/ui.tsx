@@ -15,7 +15,7 @@ type I = {
 
 function Configure({ i, onDone }: { i: I; onDone: () => void }) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(i.fields.filter((f) => !f.secret).map((f) => [f.key, i.config[f.key] ?? ""])));
-  const [enabled, setEnabled] = useState(i.enabled || i.category === "AI Providers");
+  const [enabled, setEnabled] = useState(i.enabled || i.category === "AI Providers" || i.category === "Voice");
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [error, setError] = useState("");
@@ -110,7 +110,7 @@ export function IntegrationsUI({ items, canEdit }: { items: I[]; canEdit: boolea
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <StatusBadge status={i.status} />
                     <Badge tone={i.implementation === "live" ? "accent" : "neutral"}>{i.implementation === "live" ? "connector ready" : "planned"}</Badge>
-                    {i.status !== "not_configured" && !i.enabled && i.category !== "AI Providers" && <Badge tone="warn">disabled</Badge>}
+                    {i.status !== "not_configured" && !i.enabled && i.category !== "AI Providers" && i.category !== "Voice" && <Badge tone="warn">disabled</Badge>}
                     {i.actions.length > 0 && <Badge tone="warn">approval-gated actions</Badge>}
                   </div>
                   {i.lastError && <p className="mt-2 text-xs text-bad line-clamp-2">{i.lastError}</p>}

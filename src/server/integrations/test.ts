@@ -51,6 +51,11 @@ export async function testIntegration(slug: string): Promise<{ ok: boolean; mess
         message = `Connected to page "${r.name}"`;
         break;
       }
+      case "elevenlabs": {
+        const r = await get("https://api.elevenlabs.io/v1/voices", { "xi-api-key": values.apiKey });
+        message = `Connected — ${r.voices?.length ?? 0} voices available`;
+        break;
+      }
       case "stripe":
         await get("https://api.stripe.com/v1/balance", { authorization: `Bearer ${values.secretKey}` });
         break;

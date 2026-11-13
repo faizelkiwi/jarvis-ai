@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { Download, Lock, ShieldCheck } from "lucide-react";
 import { Badge, Button, Card, Dot, ErrorText, Field, Input, PageHeader, Select, StatusBadge, Textarea, Ago } from "@/components/ui";
 import { api, toast } from "@/lib/api";
+import { VoiceStudio } from "@/components/voice-studio";
+import { pickButlerVoice } from "@/components/voice";
 
 type User = { id: string; name: string; email: string; role: string };
 type Settings = Record<string, Record<string, unknown>>;
@@ -86,7 +88,7 @@ function VoicePicker({ value, onChange }: { value: string; onChange: (v: string)
   }, []);
   return (
     <Select value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Browser default</option>
+      <option value="">Automatic — British male (butler)</option>
       {voices.map((v) => <option key={v}>{v}</option>)}
     </Select>
   );
@@ -284,13 +286,27 @@ export function SettingsUI({ tab: initialTab, user, settings, internalActions, c
                   <>
                     <Check label="Enable voice input" checked={!!v.enabled} onChange={(b) => set("enabled", b)} hint="Uses your browser's speech recognition. Audio is processed by the browser vendor's speech service." />
                     <Check label="Speak JARVIS responses to voice instructions" checked={!!v.speakResponses} onChange={(b) => set("speakResponses", b)} />
+                    <Field label="Voice engine" hint="Premium needs ElevenLabs connected in Integrations; otherwise the device's built-in British male voice is used.">
+                      <Select value={str(v.engine)} onChange={(e) => set("engine", e.target.value)}>
+                        <option value="auto">Automatic — premium when connected (recommended)</option>
+                        <option value="elevenlabs">Premium only (ElevenLabs)</option>
+                        <option value="browser">Device voice only (free)</option>
+                      </Select>
+                    </Field>
+                    {v.engine !== "browser" && (
+                      <VoiceStudio
+                        settings={v as unknown as Parameters<typeof VoiceStudio>[0]["settings"]}
+                        onVoiceChosen={(id, name) => { set("elevenVoiceId", id); set("elevenVoiceName", name); }}
+                      />
+                    )}
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Language"><Select value={str(v.language)} onChange={(e) => set("language", e.target.value)}>{["en-ZA", "en-GB", "en-US", "en-AU"].map((l) => <option key={l}>{l}</option>)}</Select></Field>
-                      <Field label="Voice"><VoicePicker value={str(v.voiceName)} onChange={(x) => set("voiceName", x)} /></Field>
-                      <Field label={`Speaking rate (${str(v.rate)})`}><input type="range" min={0.5} max={2} step={0.1} value={Number(v.rate)} onChange={(e) => set("rate", Number(e.target.value))} className="w-full accent-[var(--accent)]" /></Field>
-                      <Field label={`Pitch (${str(v.pitch)})`}><input type="range" min={0} max={2} step={0.1} value={Number(v.pitch)} onChange={(e) => set("pitch", Number(e.target.value))} className="w-full accent-[var(--accent)]" /></Field>
+                      <Field label="Listening language" hint="The accent JARVIS expects when you speak."><Select value={str(v.language)} onChange={(e) => set("language", e.target.value)}>{["en-ZA", "en-GB", "en-US", "en-AU"].map((l) => <option key={l}>{l}</option>)}</Select></Field>
+                      <Field label="Device voice (fallback)"><VoicePicker value={str(v.voiceName)} onChange={(x) => set("voiceName", x)} /></Field>
+                      <Field label={`Speaking rate (${str(v.rate)})`}><input type="range" min={0.5} max={2} step={0.05} value={Number(v.rate)} onChange={(e) => set("rate", Number(e.target.value))} className="w-full accent-[var(--accent)]" /></Field>
+                      <Field label={`Pitch — device voice (${str(v.pitch)})`}><input type="range" min={0} max={2} step={0.02} value={Number(v.pitch)} onChange={(e) => set("pitch", Number(e.target.value))} className="w-full accent-[var(--accent)]" /></Field>
                     </div>
-                    <Button type="button" onClick={() => { const u = new SpeechSynthesisUtterance("Good morning. All systems are operational."); u.rate = Number(v.rate); u.pitch = Number(v.pitch); u.lang = str(v.language); const vc = speechSynthesis.getVoices().find((x) => x.name === v.voiceName); if (vc) u.voice = vc; speechSynthesis.speak(u); }}>Test voice</Button>
+                    <Button type="button" onClick={() => { const u = new SpeechSynthesisUtterance("Good morning. All systems are operational. Shall I begin with today's priorities?"); u.rate = Number(v.rate); u.pitch = Number(v.pitch); const vc = pickButlerVoice(speechSynthesis.getVoices(), str(v.voiceName)); if (vc) { u.voice = vc; u.lang = vc.lang; } speechSynthesis.speak(u); }}>Test device voice</Button>
+                    <p className="text-xs text-muted">Remember to press <b>Save</b> after changing the voice.</p>
                   </>
                 )}
               </Form>

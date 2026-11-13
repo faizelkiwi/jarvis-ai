@@ -2,7 +2,70 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type VoiceSettings = { enabled: boolean; speakResponses: boolean; voiceName: string; rate: number; pitch: number; language: string };
+export type VoiceSettings = {
+  enabled: boolean;
+  speakResponses: boolean;
+  voiceName: string;
+  rate: number;
+  pitch: number;
+  language: string;
+  engine?: "auto" | "elevenlabs" | "browser";
+  elevenVoiceId?: string;
+};
+
+// A short silent WAV, generated in code, used to unlock audio playback inside a tap (required on iOS).
+function silentWav(): string {
+  const samples = 800; // 0.1 s at 8 kHz, 8-bit mono
+  const bytes = new Uint8Array(44 + samples);
+  const view = new DataView(bytes.buffer);
+  const str = (o: number, t: string) => [...t].forEach((c, i) => view.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF");
+  view.setUint32(4, 36 + samples, true);
+  str(8, "WAVE");
+  str(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, 8000, true);
+  view.setUint32(28, 8000, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  str(36, "data");
+  view.setUint32(40, samples, true);
+  bytes.fill(128, 44); // 8-bit silence
+  let bin = "";
+  bytes.forEach((x) => (bin += String.fromCharCode(x)));
+  return `data:audio/wav;base64,${btoa(bin)}`;
+}
+let sharedAudio: HTMLAudioElement | null = null;
+function audioEl() {
+  if (typeof window === "undefined") return null;
+  if (!sharedAudio) {
+    sharedAudio = new Audio();
+    sharedAudio.setAttribute("playsinline", "true");
+  }
+  return sharedAudio;
+}
+let premiumUnavailable = false;
+
+/** Picks the best British male voice available on this device (butler default). */
+export function pickButlerVoice(voices: SpeechSynthesisVoice[], preferredName?: string) {
+  if (preferredName) {
+    const exact = voices.find((v) => v.name === preferredName);
+    if (exact) return exact;
+  }
+  const gb = voices.filter((v) => /en[-_]GB/i.test(v.lang));
+  const male = /daniel|arthur|george|oliver|ryan|thomas|malcolm|harry|james|william|male|gbb|gbd|rjs/i;
+  const female = /female|serena|kate|stephanie|martha|fiona|susan|libby|sonia|hazel|emily|amy/i;
+  return (
+    gb.find((v) => male.test(v.name) && !female.test(v.name)) ??
+    voices.find((v) => /google uk english male/i.test(v.name)) ??
+    gb.find((v) => !female.test(v.name)) ??
+    gb[0] ??
+    voices.find((v) => v.lang.startsWith("en")) ??
+    null
+  );
+}
 
 type Rec = {
   lang: string;
@@ -18,6 +81,13 @@ type Rec = {
 
 /** Mobile browsers only allow speech that was unlocked by a user tap; call this inside a tap handler. */
 export function primeSpeech() {
+  try {
+    const a = audioEl();
+    if (a && a.paused) {
+      a.src = silentWav();
+      a.play().catch(() => {});
+    }
+  } catch {}
   try {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const u = new SpeechSynthesisUtterance(" ");
@@ -55,6 +125,7 @@ export function useVoice(settings: VoiceSettings, onFinal: (text: string) => voi
   const [interim, setInterim] = useState("");
   const [error, setError] = useState("");
   const recRef = useRef<Rec | null>(null);
+  const speakToken = useRef(0);
   const finalRef = useRef(onFinal);
   finalRef.current = onFinal;
 
@@ -116,43 +187,82 @@ export function useVoice(settings: VoiceSettings, onFinal: (text: string) => voi
         onDone?.();
         return;
       }
-      // Mobile browsers cut long utterances off, so speak sentence by sentence.
-      const chunks: string[] = [];
-      for (const sentence of spoken.match(/[^.!?]+[.!?]*\s*/g) ?? [spoken]) {
-        const last = chunks[chunks.length - 1];
-        if (last && (last + sentence).length < 220) chunks[chunks.length - 1] = last + sentence;
-        else chunks.push(sentence);
-      }
-      window.speechSynthesis.cancel();
-      const voices = window.speechSynthesis.getVoices();
-      const voice =
-        voices.find((v) => v.name === settings.voiceName) ??
-        voices.find((v) => v.lang === settings.language) ??
-        voices.find((v) => v.lang.startsWith("en-GB")) ??
-        voices.find((v) => v.lang.startsWith("en"));
+      window.speechSynthesis?.cancel();
+      const a = audioEl();
+      a?.pause();
+      const myToken = ++speakToken.current;
       setSpeaking(true);
-      chunks.forEach((c, i) => {
-        const u = new SpeechSynthesisUtterance(c.trim());
-        u.rate = settings.rate;
-        u.pitch = settings.pitch;
-        u.lang = voice?.lang ?? settings.language;
-        if (voice) u.voice = voice;
-        if (i === chunks.length - 1) {
-          u.onend = () => {
-            setSpeaking(false);
-            onDone?.();
-          };
-          u.onerror = () => {
-            setSpeaking(false);
-            onDone?.();
-          };
+      const finish = () => {
+        if (myToken !== speakToken.current) return;
+        setSpeaking(false);
+        onDone?.();
+      };
+
+      const browserSpeak = () => {
+        if (myToken !== speakToken.current) return;
+        if (!("speechSynthesis" in window)) return finish();
+        // Mobile browsers cut long utterances off, so speak sentence by sentence.
+        const chunks: string[] = [];
+        for (const sentence of spoken.match(/[^.!?]+[.!?]*\s*/g) ?? [spoken]) {
+          const last = chunks[chunks.length - 1];
+          if (last && (last + sentence).length < 220) chunks[chunks.length - 1] = last + sentence;
+          else chunks.push(sentence);
         }
-        window.speechSynthesis.speak(u);
-      });
+        const voice = pickButlerVoice(window.speechSynthesis.getVoices(), settings.voiceName);
+        chunks.forEach((c, i) => {
+          const u = new SpeechSynthesisUtterance(c.trim());
+          u.rate = settings.rate;
+          u.pitch = settings.pitch;
+          u.lang = voice?.lang ?? "en-GB";
+          if (voice) u.voice = voice;
+          if (i === chunks.length - 1) {
+            u.onend = finish;
+            u.onerror = finish;
+          }
+          window.speechSynthesis.speak(u);
+        });
+      };
+
+      const usePremium = settings.engine !== "browser" && !premiumUnavailable && a;
+      if (!usePremium) return browserSpeak();
+      fetch("/api/voice/speak", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ text: spoken }),
+      })
+        .then(async (res) => {
+          if (res.status === 409) {
+            premiumUnavailable = true; // not connected: use the device voice from now on
+            throw new Error("not configured");
+          }
+          if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? `HTTP ${res.status}`);
+          return res.blob();
+        })
+        .then((blob) => {
+          if (myToken !== speakToken.current) return;
+          const url = URL.createObjectURL(blob);
+          a.onended = () => {
+            URL.revokeObjectURL(url);
+            finish();
+          };
+          a.onerror = () => {
+            URL.revokeObjectURL(url);
+            browserSpeak();
+          };
+          a.src = url;
+          return a.play().catch(() => browserSpeak());
+        })
+        .catch((e) => {
+          if ((e as Error).message !== "not configured") console.warn("[voice] premium voice failed, using device voice:", (e as Error).message);
+          browserSpeak();
+        });
     },
     [settings],
   );
   const stopSpeaking = useCallback(() => {
+    speakToken.current++;
+    audioEl()?.pause();
     window.speechSynthesis?.cancel();
     setSpeaking(false);
   }, []);

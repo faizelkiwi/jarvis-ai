@@ -10,7 +10,7 @@ export type IntegrationField = { key: string; label: string; secret: boolean; pl
 export type IntegrationDef = {
   slug: string;
   name: string;
-  category: "AI Providers" | "Communication" | "Social Media" | "Google Workspace" | "Microsoft 365" | "Automation" | "Payments" | "Analytics";
+  category: "AI Providers" | "Voice" | "Communication" | "Social Media" | "Google Workspace" | "Microsoft 365" | "Automation" | "Payments" | "Analytics";
   description: string;
   implementation: "live" | "planned";
   authType: "api_key" | "bot_token" | "webhook" | "oauth";
@@ -58,6 +58,19 @@ export const INTEGRATIONS: IntegrationDef[] = [
     fields: [{ key: "apiKey", label: "API key", secret: true, placeholder: "AIza…" }],
     actions: [],
     docsUrl: "https://aistudio.google.com/apikey",
+  },
+  {
+    slug: "elevenlabs",
+    name: "ElevenLabs Voice",
+    category: "Voice",
+    description: "Lifelike speech for JARVIS (British butler voice by default) and cloning of your own voice.",
+    implementation: "live",
+    authType: "api_key",
+    envVar: "ELEVENLABS_API_KEY",
+    fields: [{ key: "apiKey", label: "API key", secret: true, placeholder: "sk_…" }],
+    actions: [],
+    docsUrl: "https://elevenlabs.io/app/settings/api-keys",
+    note: "Free tier ≈ 10,000 characters/month (roughly 10–20 spoken replies). Voice cloning requires the Starter plan or higher. Spoken text is sent to ElevenLabs.",
   },
   {
     slug: "telegram",

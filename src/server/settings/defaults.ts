@@ -39,6 +39,11 @@ export const settingSchemas = {
     rate: z.number().min(0.5).max(2),
     pitch: z.number().min(0).max(2),
     language: z.string().max(20),
+    /** auto = premium (ElevenLabs) when connected, otherwise the device's built-in voice. */
+    engine: z.enum(["auto", "elevenlabs", "browser"]),
+    elevenVoiceId: z.string().max(100),
+    elevenVoiceName: z.string().max(200),
+    elevenModel: z.string().max(100),
   }),
   "notifications.settings": z.object({
     approvalRequests: z.boolean(),
@@ -90,9 +95,14 @@ export const DEFAULT_SETTINGS: { [K in SettingKey]: SettingValue<K> } = {
     enabled: true,
     speakResponses: true,
     voiceName: "",
-    rate: 1,
-    pitch: 1,
+    rate: 0.95,
+    pitch: 0.92,
     language: "en-ZA",
+    engine: "auto",
+    // ElevenLabs premade "George": warm, composed British male.
+    elevenVoiceId: "JBFqnCBsd6RMkjVDRZzb",
+    elevenVoiceName: "George (British)",
+    elevenModel: "eleven_turbo_v2_5",
   },
   "notifications.settings": { approvalRequests: true, taskFailures: true, taskCompletions: true },
   "auth.settings": { allowRegistration: false, sessionDays: 7 },
