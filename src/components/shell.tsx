@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  AudioLines,
   Bell,
   BookOpen,
   Bot,
@@ -28,6 +29,7 @@ import { api } from "@/lib/api";
 
 export const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/voice", label: "Talk to JARVIS", icon: AudioLines },
   { href: "/command", label: "JARVIS Command", icon: Terminal },
   { href: "/agents", label: "AI Agents", icon: Bot },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
@@ -40,7 +42,7 @@ export const NAV = [
   { href: "/notifications", label: "Notifications", icon: Bell, badge: "notifications" as const },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
-const MOBILE = ["/dashboard", "/command", "/approvals", "/tasks"];
+const MOBILE = ["/dashboard", "/command", "/voice", "/approvals"];
 
 type Counts = { approvals: number; notifications: number };
 type User = { name: string; email: string; role: string };
@@ -230,7 +232,7 @@ export function Shell({ user, counts: initial, demo, aiReady, children }: { user
           return (
             <Link key={n.href} href={n.href} className={clsx("relative flex flex-col items-center gap-0.5 py-2 text-[10px]", active ? "text-accent" : "text-muted")}>
               <n.icon className="size-5" />
-              {n.label.replace("JARVIS ", "")}
+              {n.href === "/voice" ? "Talk" : n.label.replace("JARVIS ", "")}
               {badge > 0 && <span className="absolute top-1 right-[25%] rounded-full bg-accent px-1 text-[9px] font-bold text-[#03121c]">{badge}</span>}
             </Link>
           );

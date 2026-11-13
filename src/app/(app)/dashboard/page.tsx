@@ -78,7 +78,10 @@ export default async function Dashboard() {
               </ul>
             </div>
           </div>
-          <div className="mt-5 w-full">
+          <div className="mt-5 w-full space-y-2">
+            <Link href="/voice" className="flex items-center justify-center gap-2 rounded-lg border border-line-strong bg-accent-soft py-2.5 text-sm font-medium text-accent shadow-[0_0_18px_rgba(34,211,238,0.2)] hover:brightness-110">
+              🎙️ Talk to JARVIS
+            </Link>
             <CommandInput voice={voice} compact />
           </div>
         </section>

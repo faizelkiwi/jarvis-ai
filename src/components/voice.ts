@@ -96,29 +96,59 @@ export function useVoice(settings: VoiceSettings, onFinal: (text: string) => voi
   const stop = useCallback(() => recRef.current?.stop(), []);
 
   const speak = useCallback(
-    (markdown: string, force = false) => {
-      if (!("speechSynthesis" in window) || (!settings.speakResponses && !force)) return;
+    (markdown: string, force = false, onDone?: () => void) => {
+      if (!("speechSynthesis" in window) || (!settings.speakResponses && !force)) {
+        onDone?.();
+        return;
+      }
       const text = markdown
         .replace(/```[\s\S]*?```/g, " ")
         .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-        .replace(/[#*_>`|-]+/g, " ")
+        .replace(/https?:\/\/\S+/g, " ")
+        .replace(/[#*_>`|~]+/g, " ")
+        .replace(/^\s*[-•]\s+/gm, "")
         .replace(/\s+/g, " ")
         .trim();
-      // Keep it short enough to listen to; stop at a sentence boundary.
-      let spoken = text.slice(0, 900);
-      if (text.length > 900) spoken = spoken.slice(0, Math.max(spoken.lastIndexOf(". "), 400) + 1) + " The full answer is on screen.";
-      if (!spoken) return;
+      // Keep it listenable; stop at a sentence boundary.
+      let spoken = text.slice(0, 1000);
+      if (text.length > 1000) spoken = spoken.slice(0, Math.max(spoken.lastIndexOf(". "), 400) + 1) + " The full details are on screen.";
+      if (!spoken) {
+        onDone?.();
+        return;
+      }
+      // Mobile browsers cut long utterances off, so speak sentence by sentence.
+      const chunks: string[] = [];
+      for (const sentence of spoken.match(/[^.!?]+[.!?]*\s*/g) ?? [spoken]) {
+        const last = chunks[chunks.length - 1];
+        if (last && (last + sentence).length < 220) chunks[chunks.length - 1] = last + sentence;
+        else chunks.push(sentence);
+      }
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(spoken);
-      u.rate = settings.rate;
-      u.pitch = settings.pitch;
-      u.lang = settings.language;
-      const voice = window.speechSynthesis.getVoices().find((v) => v.name === settings.voiceName);
-      if (voice) u.voice = voice;
-      u.onstart = () => setSpeaking(true);
-      u.onend = () => setSpeaking(false);
-      u.onerror = () => setSpeaking(false);
-      window.speechSynthesis.speak(u);
+      const voices = window.speechSynthesis.getVoices();
+      const voice =
+        voices.find((v) => v.name === settings.voiceName) ??
+        voices.find((v) => v.lang === settings.language) ??
+        voices.find((v) => v.lang.startsWith("en-GB")) ??
+        voices.find((v) => v.lang.startsWith("en"));
+      setSpeaking(true);
+      chunks.forEach((c, i) => {
+        const u = new SpeechSynthesisUtterance(c.trim());
+        u.rate = settings.rate;
+        u.pitch = settings.pitch;
+        u.lang = voice?.lang ?? settings.language;
+        if (voice) u.voice = voice;
+        if (i === chunks.length - 1) {
+          u.onend = () => {
+            setSpeaking(false);
+            onDone?.();
+          };
+          u.onerror = () => {
+            setSpeaking(false);
+            onDone?.();
+          };
+        }
+        window.speechSynthesis.speak(u);
+      });
     },
     [settings],
   );
