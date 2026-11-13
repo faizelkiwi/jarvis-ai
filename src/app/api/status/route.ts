@@ -69,11 +69,15 @@ export async function GET() {
       const lastFail = await pool.query("select type, last_error, finished_at from jobs where last_error is not null order by coalesce(finished_at, run_at) desc limit 1");
       const cmds = await pool.query("select status, count(*)::int n from commands group by status");
       const hb = await pool.query("select value from settings where key = 'runtime.worker.heartbeat'");
+      const kick = await pool.query("select key, value from settings where key in ('runtime.worker.lastKick','runtime.worker.lastError')");
+      const kv = Object.fromEntries(kick.rows.map((r) => [r.key, r.value]));
       queue = {
         jobs: Object.fromEntries(counts.rows.map((r) => [r.status, r.n])),
         oldestQueued: counts.rows.find((r) => r.status === "queued")?.oldest ?? null,
         commands: Object.fromEntries(cmds.rows.map((r) => [r.status, r.n])),
         lastWorkerRun: hb.rows[0]?.value?.at ?? "never",
+        lastWorkerStart: kv["runtime.worker.lastKick"]?.at ?? "never",
+        lastWorkerError: kv["runtime.worker.lastError"] ?? null,
         lastJobError: lastFail.rows[0] ? `${lastFail.rows[0].type}: ${redactSecrets(String(lastFail.rows[0].last_error)).slice(0, 300)}` : null,
       };
     } catch (e) {

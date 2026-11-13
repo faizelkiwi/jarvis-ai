@@ -126,16 +126,34 @@ export function CommandView({ id, voice, autoSpeak }: { id: string; voice: Voice
   const spoken = useRef<string | null>(null);
   const v = useVoice(voice, () => {});
 
+  const [workerError, setWorkerError] = useState("");
   useEffect(() => {
     let stop = false;
     let timer: ReturnType<typeof setTimeout>;
+    let ticking = false;
+    const tick = async () => {
+      // Ask the server to process queued work now (needed on serverless hosting).
+      if (ticking) return;
+      ticking = true;
+      try {
+        await api("/api/worker/tick", { body: {} });
+        if (!stop) setWorkerError("");
+      } catch (e) {
+        if (!stop) setWorkerError((e as Error).message);
+      } finally {
+        ticking = false;
+      }
+    };
     const load = async () => {
       try {
         const d = await api<CmdData>(`/api/commands/${id}`);
         if (stop) return;
         setData(d);
         setError("");
-        if (["planning", "running"].includes(d.command.status) || (!d.command.response && d.command.status !== "failed")) timer = setTimeout(load, 2000);
+        if (["planning", "running"].includes(d.command.status) || (!d.command.response && d.command.status !== "failed")) {
+          tick();
+          timer = setTimeout(load, 2000);
+        }
       } catch (e) {
         if (!stop) setError((e as Error).message);
       }
@@ -227,6 +245,7 @@ export function CommandView({ id, voice, autoSpeak }: { id: string; voice: Voice
             </Button>
           )}
         </div>
+        {workerError && !command.response && <p className="mb-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">{workerError}</p>}
         {command.response ? (
           <Markdown>{command.response}</Markdown>
         ) : command.status === "failed" ? (
@@ -238,7 +257,7 @@ export function CommandView({ id, voice, autoSpeak }: { id: string; voice: Voice
                 <span key={i} className="wave-bar w-1 h-full rounded bg-accent" style={{ animationDelay: `${i * 0.12}s` }} />
               ))}
             </span>
-            {command.status === "planning" ? "JARVIS is planning and selecting agents…" : "Agents are working…"}
+            {command.status === "planning" ? "JARVIS is thinking…" : "Agents are working…"}
           </div>
         ) : null}
       </div>
