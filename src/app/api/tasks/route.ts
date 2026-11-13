@@ -1,3 +1,4 @@
+import { kickWorker } from "@/server/jobs/kick";
 import { createTask, createTaskInput, listTasks, scheduleReadyTasks } from "@/server/tasks/service";
 import { json, route } from "@/server/http";
 
@@ -10,5 +11,8 @@ export const POST = route({ role: "operator", limit: [60, 60] }, async ({ req, u
   const v = createTaskInput.parse(await json(req));
   const task = await createTask({ ...v, createdBy: `user:${user.id}` });
   await scheduleReadyTasks();
+  kickWorker();
   return { task };
 });
+
+export const maxDuration = 300;

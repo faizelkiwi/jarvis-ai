@@ -1,3 +1,4 @@
+import { kickWorker } from "@/server/jobs/kick";
 import { desc } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/server/db/client";
@@ -15,5 +16,8 @@ export const POST = route({ role: "operator", limit: [30, 60] }, async ({ req, u
     .object({ text: z.string().trim().min(2).max(8000), channel: z.enum(["text", "voice"]).default("text"), projectId: z.string().uuid().nullable().optional() })
     .parse(await json(req));
   const cmd = await submitCommand({ text: v.text, userId: user.id, channel: v.channel, projectId: v.projectId });
+  kickWorker();
   return { command: cmd };
 });
+
+export const maxDuration = 300;

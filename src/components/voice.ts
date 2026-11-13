@@ -16,6 +16,31 @@ type Rec = {
   onend: (() => void) | null;
 };
 
+/** Mobile browsers only allow speech that was unlocked by a user tap; call this inside a tap handler. */
+export function primeSpeech() {
+  try {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    window.speechSynthesis.getVoices();
+  } catch {}
+}
+
+const REPLIES_KEY = "jarvis-voice-replies";
+export function voiceRepliesEnabled() {
+  try {
+    return localStorage.getItem(REPLIES_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+export function setVoiceReplies(on: boolean) {
+  try {
+    localStorage.setItem(REPLIES_KEY, on ? "on" : "off");
+  } catch {}
+}
+
 function recognitionCtor(): (new () => Rec) | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as { SpeechRecognition?: new () => Rec; webkitSpeechRecognition?: new () => Rec };
@@ -41,6 +66,7 @@ export function useVoice(settings: VoiceSettings, onFinal: (text: string) => voi
     const Ctor = recognitionCtor();
     if (!Ctor || !settings.enabled) return;
     window.speechSynthesis?.cancel();
+    primeSpeech();
     setError("");
     const rec = new Ctor();
     rec.lang = settings.language || "en-US";
@@ -70,18 +96,20 @@ export function useVoice(settings: VoiceSettings, onFinal: (text: string) => voi
   const stop = useCallback(() => recRef.current?.stop(), []);
 
   const speak = useCallback(
-    (markdown: string) => {
-      if (!("speechSynthesis" in window) || !settings.speakResponses) return;
+    (markdown: string, force = false) => {
+      if (!("speechSynthesis" in window) || (!settings.speakResponses && !force)) return;
       const text = markdown
         .replace(/```[\s\S]*?```/g, " ")
         .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
         .replace(/[#*_>`|-]+/g, " ")
         .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 1200);
-      if (!text) return;
+        .trim();
+      // Keep it short enough to listen to; stop at a sentence boundary.
+      let spoken = text.slice(0, 900);
+      if (text.length > 900) spoken = spoken.slice(0, Math.max(spoken.lastIndexOf(". "), 400) + 1) + " The full answer is on screen.";
+      if (!spoken) return;
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
+      const u = new SpeechSynthesisUtterance(spoken);
       u.rate = settings.rate;
       u.pitch = settings.pitch;
       u.lang = settings.language;

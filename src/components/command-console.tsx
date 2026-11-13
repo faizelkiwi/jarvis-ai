@@ -8,7 +8,7 @@ import { ArrowUp, ChevronDown, Mic, Square, Volume2, VolumeX } from "lucide-reac
 import { Badge, Button, StatusBadge, Ago } from "@/components/ui";
 import { Markdown } from "@/components/markdown";
 import { api, toast } from "@/lib/api";
-import { useVoice, type VoiceSettings } from "@/components/voice";
+import { primeSpeech, setVoiceReplies, useVoice, voiceRepliesEnabled, type VoiceSettings } from "@/components/voice";
 
 export const EXAMPLES = [
   "Research five profitable digital product opportunities.",
@@ -23,17 +23,20 @@ export function CommandInput({ voice, onSubmitted, compact }: { voice: VoiceSett
   const router = useRouter();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [replies, setReplies] = useState(true);
+  useEffect(() => setReplies(voiceRepliesEnabled()), []);
 
   const submit = useCallback(
     async (value: string, channel: "text" | "voice") => {
       const v = value.trim();
       if (v.length < 2 || busy) return;
+      if (voiceRepliesEnabled()) primeSpeech();
       setBusy(true);
       try {
         const { command } = await api<{ command: { id: string } }>("/api/commands", { body: { text: v, channel } });
         setText("");
         if (onSubmitted) onSubmitted(command.id, channel);
-        else router.push(`/command?id=${command.id}${channel === "voice" ? "&voice=1" : ""}`);
+        else router.push(`/command?id=${command.id}${channel === "voice" || voiceRepliesEnabled() ? "&voice=1" : ""}`);
       } catch (e) {
         toast((e as Error).message, "error");
       } finally {
@@ -85,7 +88,25 @@ export function CommandInput({ voice, onSubmitted, compact }: { voice: VoiceSett
           {!busy && <ArrowUp className="size-4" />}
         </Button>
       </form>
-      {v.error && <p className="text-xs text-warn">{v.error}</p>}
+      <div className="flex flex-wrap items-center gap-3">
+        {v.supported.tts && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = !replies;
+              setVoiceReplies(next);
+              setReplies(next);
+              if (next) primeSpeech();
+            }}
+            aria-pressed={replies}
+            className={clsx("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs", replies ? "border-line-strong bg-accent-soft text-accent" : "border-line text-muted")}
+          >
+            {replies ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
+            Voice replies {replies ? "on" : "off"}
+          </button>
+        )}
+        {v.error && <p className="text-xs text-warn">{v.error}</p>}
+      </div>
       {!v.supported.stt && voice.enabled && <p className="text-[11px] text-muted">Voice input needs a browser with speech recognition (Chrome, Edge, Safari).</p>}
     </div>
   );
@@ -129,7 +150,7 @@ export function CommandView({ id, voice, autoSpeak }: { id: string; voice: Voice
   useEffect(() => {
     if (autoSpeak && data?.command.response && spoken.current !== id) {
       spoken.current = id;
-      v.speak(data.command.response);
+      v.speak(data.command.response, true);
     }
   }, [autoSpeak, data?.command.response, id, v]);
 
@@ -200,7 +221,7 @@ export function CommandView({ id, voice, autoSpeak }: { id: string; voice: Voice
         <div className="mb-2 flex items-center justify-between">
           <h3 className="panel-title">JARVIS response</h3>
           {command.response && v.supported.tts && (
-            <Button size="sm" variant="ghost" onClick={() => (v.speaking ? v.stopSpeaking() : v.speak(command.response!))} aria-label={v.speaking ? "Stop speaking" : "Read aloud"}>
+            <Button size="sm" variant="ghost" onClick={() => (v.speaking ? v.stopSpeaking() : v.speak(command.response!, true))} aria-label={v.speaking ? "Stop speaking" : "Read aloud"}>
               {v.speaking ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
               {v.speaking ? "Stop" : "Read aloud"}
             </Button>

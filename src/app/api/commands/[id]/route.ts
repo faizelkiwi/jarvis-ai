@@ -1,3 +1,4 @@
+import { kickWorker } from "@/server/jobs/kick";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { approvals, commands } from "@/server/db/schema";
@@ -8,8 +9,11 @@ export const GET = route<{ id: string }>({}, async ({ params }) => {
   const db = await getDb();
   const [command] = await db.select().from(commands).where(eq(commands.id, params.id));
   if (!command) notFound("Command");
+  if (!command.response || command.status === "running") kickWorker();
   const t = await listTasks({ commandId: params.id });
   const ids = t.map((x) => x.task.id);
   const appr = ids.length ? (await db.select().from(approvals)).filter((a) => a.taskId && ids.includes(a.taskId)) : [];
   return { command, tasks: t, approvals: appr };
 });
+
+export const maxDuration = 300;

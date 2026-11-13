@@ -6,7 +6,7 @@ import { useState } from "react";
 import { MessageSquare, Mic } from "lucide-react";
 import { CommandInput, CommandView, EXAMPLES } from "@/components/command-console";
 import { EmptyState, PageHeader, StatusBadge, Ago } from "@/components/ui";
-import type { VoiceSettings } from "@/components/voice";
+import { voiceRepliesEnabled, type VoiceSettings } from "@/components/voice";
 
 type H = { id: string; input: string; status: string; channel: string; createdAt: string };
 
@@ -23,7 +23,7 @@ export function CommandCentre({ history, voice, initialId, autoSpeak }: { histor
             voice={voice}
             onSubmitted={(id, channel) => {
               setSelected(id);
-              setSpeak(channel === "voice");
+              setSpeak(channel === "voice" || voiceRepliesEnabled());
               router.replace(`/command?id=${id}`);
               router.refresh();
             }}
