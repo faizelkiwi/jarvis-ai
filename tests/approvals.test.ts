@@ -122,6 +122,7 @@ describe("approval enforcement", () => {
     const revisions = await db.select().from(tasks).where(eq(tasks.parentTaskId, second.task.id));
     expect(revisions).toHaveLength(1);
     expect(revisions[0].description).toContain("Make it shorter");
+    await drainJobs(); // let the revision task finish so it can't leak into the next test
   });
 
   it("internal actions follow configurable rules", async () => {
