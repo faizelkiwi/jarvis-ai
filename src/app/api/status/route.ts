@@ -58,5 +58,52 @@ export async function GET() {
       }
     }
   }
-  return NextResponse.json({ ok: database.startsWith("connected · tables present") && checks.JARVIS_ENCRYPTION_KEY === "set", database, checks });
+  // Job queue (counts + latest failure reason, secrets redacted).
+  let queue: Record<string, unknown> = {};
+  if (database.startsWith("connected · tables present")) {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: url, ssl: url!.includes("localhost") ? undefined : { rejectUnauthorized: false }, connectionTimeoutMillis: 8000, max: 1 });
+    try {
+      const { redactSecrets } = await import("@/server/security/crypto");
+      const counts = await pool.query("select status, count(*)::int n, min(run_at) oldest from jobs group by status");
+      const lastFail = await pool.query("select type, last_error, finished_at from jobs where last_error is not null order by coalesce(finished_at, run_at) desc limit 1");
+      const cmds = await pool.query("select status, count(*)::int n from commands group by status");
+      const hb = await pool.query("select value from settings where key = 'runtime.worker.heartbeat'");
+      queue = {
+        jobs: Object.fromEntries(counts.rows.map((r) => [r.status, r.n])),
+        oldestQueued: counts.rows.find((r) => r.status === "queued")?.oldest ?? null,
+        commands: Object.fromEntries(cmds.rows.map((r) => [r.status, r.n])),
+        lastWorkerRun: hb.rows[0]?.value?.at ?? "never",
+        lastJobError: lastFail.rows[0] ? `${lastFail.rows[0].type}: ${redactSecrets(String(lastFail.rows[0].last_error)).slice(0, 300)}` : null,
+      };
+    } catch (e) {
+      queue = { error: (e as Error).message.slice(0, 200) };
+    } finally {
+      await pool.end().catch(() => {});
+    }
+  }
+
+  // Anthropic key check (read-only model listing; costs nothing).
+  let anthropic = "no key in environment (may be saved in the app)";
+  if (process.env.ANTHROPIC_API_KEY) {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    try {
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0, timeout: 8000 });
+      await client.models.list({ limit: 1 });
+      anthropic = "key accepted";
+    } catch (e) {
+      anthropic =
+        e instanceof Anthropic.AuthenticationError
+          ? "KEY REJECTED (401) — create a new key at platform.claude.com and update ANTHROPIC_API_KEY, then redeploy"
+          : e instanceof Anthropic.PermissionDeniedError
+            ? "ACCESS DENIED (403) — check billing/credits on your Anthropic account"
+            : e instanceof Anthropic.APIConnectionError
+              ? "could not reach the Anthropic API"
+              : e instanceof Anthropic.APIError
+                ? `Anthropic API error ${e.status}`
+                : "unexpected error checking the key";
+    }
+  }
+
+  return NextResponse.json({ ok: database.startsWith("connected · tables present") && checks.JARVIS_ENCRYPTION_KEY === "set", database, anthropic, queue, checks });
 }
