@@ -5,7 +5,7 @@ import { integrations } from "@/server/db/schema";
 import { audit } from "@/server/audit/log";
 import { currentUser } from "@/server/http";
 import { hasRole } from "@/server/auth/service";
-import { clearTokenCache, exchangeCode, GOOGLE_SCOPES, patchSecrets } from "@/server/google/oauth";
+import { accountEmail, clearTokenCache, exchangeCode, GOOGLE_SCOPES, patchSecrets } from "@/server/google/oauth";
 
 /** Google redirects here after consent. Verifies state, stores the refresh token encrypted. */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: string }> }) {
@@ -29,12 +29,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: strin
     if (!t.refresh_token) return back("oauth_error=no_refresh_token");
     await patchSecrets(slug, { refreshToken: t.refresh_token });
     clearTokenCache(slug);
-    // Identify the connected mailbox.
-    let account = "";
-    try {
-      const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: { authorization: `Bearer ${t.access_token}` } });
-      account = ((await r.json()) as { emailAddress?: string }).emailAddress ?? "";
-    } catch {}
+    const account = await accountEmail(t.access_token!);
     const db = await getDb();
     const [row] = await db.select().from(integrations).where(eq(integrations.slug, slug));
     await db

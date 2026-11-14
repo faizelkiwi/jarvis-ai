@@ -18,6 +18,17 @@ export async function testIntegration(slug: string): Promise<{ ok: boolean; mess
       return { ok: false, message: (e as Error).message };
     }
   }
+  if (slug === "google-calendar") {
+    try {
+      const { listEvents } = await import("../google/calendar");
+      const now = new Date();
+      const r = await listEvents(now.toISOString(), new Date(now.getTime() + 7 * 86400_000).toISOString(), 20);
+      await recordIntegrationCheck(slug, true);
+      return { ok: true, message: `Connected — ${r.events.length} event(s) in the next 7 days${r.timeZone ? ` (calendar time zone ${r.timeZone})` : ""}` };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    }
+  }
   if (def.implementation === "planned")
     return { ok: false, message: "Credentials are stored securely, but this connector (OAuth flow / API calls) is not implemented yet." };
   if (def.authType === "webhook")

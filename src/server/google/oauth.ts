@@ -6,11 +6,34 @@ import { getIntegrationSecrets, getIntegrationConfig } from "../integrations/ser
 
 export const GOOGLE_SCOPES: Record<string, string[]> = {
   gmail: ["openid", "email", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"],
+  "google-calendar": ["openid", "email", "https://www.googleapis.com/auth/calendar.events"],
 };
+
+const LABEL: Record<string, string> = { gmail: "Gmail", "google-calendar": "Google Calendar" };
+
+/** OAuth client credentials for a Google integration; falls back to the Gmail client so one Google project serves all. */
+export async function clientCredentials(slug: string): Promise<{ clientId: string; clientSecret: string } | null> {
+  for (const source of [slug, "gmail"]) {
+    const s = await getIntegrationSecrets(source);
+    const cfg = await getIntegrationConfig(source);
+    if (cfg?.config?.clientId && s.clientSecret) return { clientId: cfg.config.clientId, clientSecret: s.clientSecret };
+  }
+  return null;
+}
+
+/** The Google account email for an access token (works for any scope set that includes "email"). */
+export async function accountEmail(token: string): Promise<string> {
+  try {
+    const r = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) });
+    return ((await r.json()) as { email?: string }).email ?? "";
+  } catch {
+    return "";
+  }
+}
 
 export class GoogleNotConnectedError extends Error {
   constructor(slug: string) {
-    super(`${slug === "gmail" ? "Gmail" : "Google"} is not connected. Open Integrations → ${slug === "gmail" ? "Gmail" : slug} and click "Connect with Google".`);
+    super(`${LABEL[slug] ?? "Google"} is not connected. Open Integrations → ${LABEL[slug] ?? slug} and click "Connect with Google".`);
   }
 }
 
@@ -68,11 +91,9 @@ async function tokenRequest(body: Record<string, string>) {
 }
 
 export async function exchangeCode(slug: string, code: string, origin: string) {
-  const s = await getIntegrationSecrets(slug);
-  const cfg = await getIntegrationConfig(slug);
-  const clientId = cfg?.config?.clientId;
-  if (!clientId || !s.clientSecret) throw new Error("OAuth client ID/secret are missing");
-  return tokenRequest({ code, client_id: clientId, client_secret: s.clientSecret, redirect_uri: redirectUri(origin, slug), grant_type: "authorization_code" });
+  const c = await clientCredentials(slug);
+  if (!c) throw new Error("OAuth client ID/secret are missing");
+  return tokenRequest({ code, client_id: c.clientId, client_secret: c.clientSecret, redirect_uri: redirectUri(origin, slug), grant_type: "authorization_code" });
 }
 
 const cache = new Map<string, { token: string; exp: number }>();
@@ -82,10 +103,10 @@ export async function accessToken(slug: string): Promise<string> {
   const hit = cache.get(slug);
   if (hit && hit.exp > Date.now() + 60_000) return hit.token;
   const s = await getIntegrationSecrets(slug);
-  const cfg = await getIntegrationConfig(slug);
-  if (!s.refreshToken || !s.clientSecret || !cfg?.config?.clientId) throw new GoogleNotConnectedError(slug);
+  const c = await clientCredentials(slug);
+  if (!s.refreshToken || !c) throw new GoogleNotConnectedError(slug);
   try {
-    const t = await tokenRequest({ refresh_token: s.refreshToken, client_id: cfg.config.clientId, client_secret: s.clientSecret, grant_type: "refresh_token" });
+    const t = await tokenRequest({ refresh_token: s.refreshToken, client_id: c.clientId, client_secret: c.clientSecret, grant_type: "refresh_token" });
     cache.set(slug, { token: t.access_token!, exp: Date.now() + (t.expires_in ?? 3600) * 1000 });
     return t.access_token!;
   } catch (e) {

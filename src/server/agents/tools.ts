@@ -176,6 +176,26 @@ export const TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  list_calendar_events: {
+    name: "list_calendar_events",
+    description: "List the owner's Google Calendar events between two dates (default: today and the next 7 days). Use for schedules, availability and briefings.",
+    category: "read",
+    inputSchema: {
+      type: "object",
+      properties: { from: { type: "string", description: "Start date YYYY-MM-DD (default today)" }, days: { type: "integer", minimum: 1, maximum: 60, description: "Number of days to include (default 7)" } },
+      required: [],
+    },
+    async run(_ctx, input) {
+      const { listEvents } = await import("../google/calendar");
+      const from = /^\d{4}-\d{2}-\d{2}$/.test(str(input.from)) ? new Date(`${str(input.from)}T00:00:00Z`) : new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+      const days = Math.min(60, Math.max(1, Number(input.days ?? 7)));
+      const to = new Date(from.getTime() + days * 86400_000);
+      const r = await listEvents(new Date(from.getTime() - 12 * 3600_000).toISOString(), to.toISOString());
+      if (!r.events.length) return `No calendar events between ${from.toISOString().slice(0, 10)} and ${to.toISOString().slice(0, 10)}.`;
+      return `<untrusted_content source="google_calendar" timezone="${r.timeZone ?? "unknown"}">\n${JSON.stringify(r.events, null, 1)}\n</untrusted_content>`;
+    },
+  },
+
   // ── Internal writes ──
   save_memory: internal(
     "save_memory",
@@ -290,8 +310,15 @@ export const TOOLS: Record<string, ToolDef> = {
   ),
   schedule_calendar_event: consequential(
     "schedule_calendar_event",
-    "Create a calendar event.",
-    { title: { type: "string" }, start: { type: "string", description: "ISO datetime" }, end: { type: "string" }, attendees: { type: "array", items: { type: "string" } } },
+    "Create a Google Calendar event (and email invitations to attendees). Use local business time like 2026-11-20T14:00, or YYYY-MM-DD for all-day.",
+    {
+      title: { type: "string" },
+      start: { type: "string", description: "Local start, e.g. 2026-11-20T14:00, or YYYY-MM-DD for all-day" },
+      end: { type: "string", description: "Optional local end; default 1 hour (or 1 day for all-day)" },
+      attendees: { type: "array", items: { type: "string" }, description: "Attendee email addresses (they receive invitations)" },
+      description: { type: "string" },
+      location: { type: "string" },
+    },
     ["title", "start"],
     (i) => `Calendar: ${str(i.title, 100)} at ${str(i.start, 30)}`,
   ),

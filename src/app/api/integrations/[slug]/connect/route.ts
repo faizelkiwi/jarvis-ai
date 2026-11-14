@@ -3,19 +3,18 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { integrations } from "@/server/db/schema";
 import { audit } from "@/server/audit/log";
-import { getIntegrationConfig, getIntegrationSecrets } from "@/server/integrations/service";
-import { authUrl, clearTokenCache, GOOGLE_SCOPES, patchSecrets } from "@/server/google/oauth";
+import { getIntegrationSecrets } from "@/server/integrations/service";
+import { authUrl, clearTokenCache, clientCredentials, GOOGLE_SCOPES, patchSecrets } from "@/server/google/oauth";
 import { randomToken } from "@/server/security/crypto";
-import { HttpError, notFound, route } from "@/server/http";
+import { notFound, route } from "@/server/http";
 
 /** Starts the Google OAuth consent flow (browser navigation). */
 export const GET = route<{ slug: string }>({ role: "admin", limit: [20, 600] }, async ({ req, params }) => {
   if (!(params.slug in GOOGLE_SCOPES)) notFound("Integration");
-  const cfg = await getIntegrationConfig(params.slug);
-  const s = await getIntegrationSecrets(params.slug);
-  if (!cfg?.config?.clientId || !s.clientSecret) throw new HttpError(400, "Save the OAuth client ID and client secret first.");
+  const c = await clientCredentials(params.slug);
+  if (!c) return NextResponse.redirect(new URL(`/integrations?oauth_error=${encodeURIComponent("Save the Google OAuth client ID and secret first (on Gmail or here).")}`, req.nextUrl.origin));
   const state = randomToken(24);
-  const res = NextResponse.redirect(authUrl(params.slug, cfg.config.clientId, req.nextUrl.origin, state));
+  const res = NextResponse.redirect(authUrl(params.slug, c.clientId, req.nextUrl.origin, state));
   res.cookies.set(`jarvis_oauth_${params.slug}`, state, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 600, path: "/" });
   return res;
 });

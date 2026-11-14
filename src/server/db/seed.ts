@@ -44,4 +44,18 @@ export async function ensureSeed(db: Db) {
       .values({ key: "runtime.seed.version", value: { v: 2 } })
       .onConflictDoUpdate({ target: settings.key, set: { value: { v: 2 } } });
   }
+
+  // v3: calendar tools for the Personal Assistant (read + create) and Business Manager (read).
+  const [ver3] = await db.select().from(settings).where(eq(settings.key, "runtime.seed.version"));
+  if (Number((ver3?.value as { v?: number })?.v ?? 1) < 3) {
+    const grants: Record<string, string[]> = { "personal-assistant": ["list_calendar_events", "schedule_calendar_event"], "business-manager": ["list_calendar_events"] };
+    for (const [slug, tools] of Object.entries(grants)) {
+      const [a] = await db.select().from(agents).where(eq(agents.slug, slug));
+      if (a) await db.update(agents).set({ permissions: [...new Set([...a.permissions, ...tools])] }).where(eq(agents.id, a.id));
+    }
+    await db
+      .insert(settings)
+      .values({ key: "runtime.seed.version", value: { v: 3 } })
+      .onConflictDoUpdate({ target: settings.key, set: { value: { v: 3 } } });
+  }
 }

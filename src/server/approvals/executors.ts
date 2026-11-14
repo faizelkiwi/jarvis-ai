@@ -151,8 +151,29 @@ const EXECUTORS: Record<string, (p: Record<string, unknown>, a: ApprovalRow) => 
   async launch_ad_campaign() {
     return { ok: false, message: "Approved, but no advertising platform integration is implemented yet. Launch the approved campaign manually." };
   },
-  async schedule_calendar_event() {
-    return { ok: false, message: "Approved, but the Google Calendar OAuth integration is not implemented yet. Add the event manually." };
+  async schedule_calendar_event(p) {
+    const v = z
+      .object({
+        title: z.string().min(1).max(300),
+        start: z.string().min(10).max(40),
+        end: z.string().max(40).optional(),
+        attendees: z.array(z.string().email()).max(50).optional(),
+        description: z.string().max(8000).optional(),
+        location: z.string().max(500).optional(),
+      })
+      .parse(p);
+    const row = await (await import("../integrations/service")).getIntegrationConfig("google-calendar");
+    if (row && !row.enabled) throw new NotConfigured('Integration "google-calendar" is disabled. Enable it in Integrations, then retry execution.');
+    const { createEvent } = await import("../google/calendar");
+    const { getSetting } = await import("../settings/service");
+    const tz = (await getSetting("business.profile")).timezone || "Africa/Johannesburg";
+    try {
+      const e = await createEvent(v, tz);
+      return { ok: true, message: `Event “${v.title}” created${v.attendees?.length ? ` and invitations sent to ${v.attendees.join(", ")}` : ""}`, data: { eventId: e.id, link: e.htmlLink } };
+    } catch (err) {
+      if ((err as Error).name === "Error" && /not connected/i.test((err as Error).message)) throw new NotConfigured((err as Error).message);
+      throw err;
+    }
   },
   async change_setting() {
     return { ok: false, message: "Approved, but agents cannot change settings directly. Apply the change in Settings." };
@@ -193,6 +214,7 @@ async function gmailReady() {
 async function integrationForAction(action: string, p: Record<string, unknown>) {
   if (action === "send_email") return (await gmailReady()) ? "gmail" : "resend";
   if (action === "send_telegram_message") return "telegram";
+  if (action === "schedule_calendar_event") return "google-calendar";
   if (action === "send_customer_message") return "whatsapp";
   if (action === "publish_social_post") return String(p.platform ?? "").toLowerCase() === "facebook" ? "facebook" : null;
   if (action === "trigger_external_workflow") return p.platform === "make" || p.platform === "n8n" ? String(p.platform) : null;

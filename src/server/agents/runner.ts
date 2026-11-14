@@ -55,7 +55,11 @@ export async function runTask(taskId: string): Promise<void> {
 
     // Context assembly: dependencies, retrieved knowledge, feedback.
     const parts: string[] = [];
-    parts.push(`Today is ${new Date().toISOString().slice(0, 10)}. Business: ${profile.name} — ${profile.industry}. Currency: ${profile.currency}. Country: ${profile.country}.`);
+    let localNow = new Date().toISOString();
+    try {
+      localNow = new Date().toLocaleString("en-GB", { timeZone: profile.timezone, weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch {}
+    parts.push(`Current local date and time: ${localNow} (${profile.timezone}). Business: ${profile.name} — ${profile.industry}. Currency: ${profile.currency}. Country: ${profile.country}.`);
     if (profile.goals) parts.push(`Business goals: ${profile.goals}`);
     if (task.dependsOn.length) {
       const deps = await db.select({ title: tasks.title, output: tasks.output }).from(tasks).where(inArray(tasks.id, task.dependsOn));

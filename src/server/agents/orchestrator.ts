@@ -109,7 +109,7 @@ export async function planCommand(commandId: string) {
     const hits = await searchKnowledge(cmd.input, { limit: 4 });
 
     const user = [
-      `Today: ${new Date().toISOString().slice(0, 10)}. Business: ${profile.name} (${profile.industry}).`,
+      `Now: ${(() => { try { return new Date().toLocaleString("en-GB", { timeZone: profile.timezone, weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return new Date().toISOString(); } })()} (${profile.timezone}). Business: ${profile.name} (${profile.industry}).`,
       "Available agents:",
       ...roster.map((a) => `- ${a.slug}: ${a.name} — ${a.description} Responsibilities: ${a.responsibilities.join("; ")}`),
       await recentConversation(commandId),
