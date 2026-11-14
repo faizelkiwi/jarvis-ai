@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "./client";
-import { agents, integrations } from "./schema";
+import { agents, integrations, settings } from "./schema";
 import { DEFAULT_AGENTS, buildAgentSystemPrompt } from "../agents/definitions";
 import { INTEGRATIONS } from "../integrations/registry";
 
@@ -28,4 +28,20 @@ export async function ensureSeed(db: Db) {
     .insert(integrations)
     .values(INTEGRATIONS.map((i) => ({ slug: i.slug })))
     .onConflictDoNothing();
+
+  // v2: grant the new inbox tools to the Personal Assistant and Customer Service agents (once, additive only).
+  const [ver] = await db.select().from(settings).where(eq(settings.key, "runtime.seed.version"));
+  if (Number((ver?.value as { v?: number })?.v ?? 1) < 2) {
+    for (const slug of ["personal-assistant", "customer-service"]) {
+      const [a] = await db.select().from(agents).where(eq(agents.slug, slug));
+      if (a) {
+        const perms = [...new Set([...a.permissions, "search_email", "read_email"])];
+        await db.update(agents).set({ permissions: perms }).where(eq(agents.id, a.id));
+      }
+    }
+    await db
+      .insert(settings)
+      .values({ key: "runtime.seed.version", value: { v: 2 } })
+      .onConflictDoUpdate({ target: settings.key, set: { value: { v: 2 } } });
+  }
 }

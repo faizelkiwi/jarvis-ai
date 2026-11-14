@@ -8,6 +8,16 @@ export async function testIntegration(slug: string): Promise<{ ok: boolean; mess
   if (!def) return { ok: false, message: "Unknown integration" };
   const { values } = await resolveIntegration(slug);
   if (!requiredFieldsPresent(slug, values)) return { ok: false, message: "Required credentials are missing." };
+  if (slug === "gmail") {
+    try {
+      const { gmailProfile } = await import("../google/gmail");
+      const me = await gmailProfile();
+      await recordIntegrationCheck(slug, true);
+      return { ok: true, message: `Connected to ${me.emailAddress}` };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    }
+  }
   if (def.implementation === "planned")
     return { ok: false, message: "Credentials are stored securely, but this connector (OAuth flow / API calls) is not implemented yet." };
   if (def.authType === "webhook")

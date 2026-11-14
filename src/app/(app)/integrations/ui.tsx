@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, KeyRound, Plug, Trash2, Zap } from "lucide-react";
 import { Badge, Button, ErrorText, Field, Input, Modal, PageHeader, StatusBadge, Ago } from "@/components/ui";
 import { api, toast } from "@/lib/api";
@@ -71,6 +71,30 @@ function Configure({ i, onDone }: { i: I; onDone: () => void }) {
           />
         </Field>
       ))}
+      {i.authType === "oauth" && i.implementation === "live" && (
+        <div className="space-y-2 rounded-lg border border-line p-3">
+          <div className="text-xs text-muted">Authorised redirect URI (paste this into Google Cloud):</div>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 break-all rounded bg-bg-2/60 px-2 py-1 text-xs">{typeof window !== "undefined" ? `${window.location.origin}/api/integrations/${i.slug}/callback` : ""}</code>
+            <Button size="sm" type="button" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/api/integrations/${i.slug}/callback`); toast("Copied"); }}>Copy</Button>
+          </div>
+          {i.config.connectedAccount ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-ok">✓ Connected to {i.config.connectedAccount}</span>
+              <Button size="sm" variant="danger" type="button" onClick={async () => { if (!confirm("Disconnect Google? JARVIS will lose access until you reconnect.")) return; await api(`/api/integrations/${i.slug}/connect`, { method: "DELETE" }); toast("Disconnected"); onDone(); }}>Disconnect</Button>
+            </div>
+          ) : (
+            <a
+              href={i.configuredSecrets.includes("clientSecret") && i.config.clientId ? `/api/integrations/${i.slug}/connect` : undefined}
+              onClick={(e) => { if (!(i.configuredSecrets.includes("clientSecret") && i.config.clientId)) { e.preventDefault(); toast("Save the client ID and secret first", "error"); } }}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-medium text-[#1f1f1f] shadow"
+            >
+              <svg viewBox="0 0 48 48" className="size-4" aria-hidden><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.6 15.1 18.9 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+              Connect with Google
+            </a>
+          )}
+        </div>
+      )}
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-[var(--accent)]" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />Enabled (allow approved actions to use this integration)</label>
       <p className="flex items-center gap-1.5 text-[11px] text-muted"><KeyRound className="size-3" />Secrets are encrypted with AES-256-GCM on the server and are never sent back to the browser or shown to agents.</p>
       {result && <p className={`rounded-lg border px-3 py-2 text-sm ${result.ok ? "border-ok/30 bg-ok/10 text-ok" : "border-bad/30 bg-bad/10 text-bad"}`}>{result.message}</p>}
@@ -88,6 +112,21 @@ function Configure({ i, onDone }: { i: I; onDone: () => void }) {
 export function IntegrationsUI({ items, canEdit }: { items: I[]; canEdit: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("connected")) {
+      toast(`${q.get("connected") === "gmail" ? "Gmail" : q.get("connected")} connected`);
+      setOpen(q.get("connected"));
+    }
+    if (q.get("oauth_error")) {
+      const e = q.get("oauth_error")!;
+      toast(
+        e === "access_denied" ? "Google access was not granted." : e === "state_mismatch" ? "The sign-in link expired. Please try Connect with Google again." : e === "no_refresh_token" ? "Google didn't return offline access. Remove JARVIS at myaccount.google.com/permissions and connect again." : `Google sign-in failed: ${e}`,
+        "error",
+      );
+    }
+    if (q.get("connected") || q.get("oauth_error")) window.history.replaceState(null, "", "/integrations");
+  }, []);
   const cats = [...new Set(items.map((i) => i.category))];
   const current = items.find((i) => i.slug === open);
   return (

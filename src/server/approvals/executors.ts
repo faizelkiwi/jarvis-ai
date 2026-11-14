@@ -91,7 +91,14 @@ const EXECUTORS: Record<string, (p: Record<string, unknown>, a: ApprovalRow) => 
     return { ok: true, message: "Telegram message sent", data: { messageId: (body.result as { message_id?: number })?.message_id } };
   },
   async send_email(p) {
-    const v = z.object({ to: z.string().email(), subject: z.string().min(1).max(300), body: z.string().min(1).max(50_000) }).parse(p);
+    const v = z.object({ to: z.string().email(), subject: z.string().min(1).max(300), body: z.string().min(1).max(50_000), thread_id: z.string().max(100).optional() }).parse(p);
+    // Prefer the owner's own Gmail when connected; otherwise Resend.
+    if (await gmailReady()) {
+      const { gmailProfile, sendGmail } = await import("../google/gmail");
+      const me = await gmailProfile();
+      const sent = await sendGmail({ from: me.emailAddress, to: v.to, subject: v.subject, body: v.body, threadId: v.thread_id });
+      return { ok: true, message: `Email sent from ${me.emailAddress} to ${v.to} via Gmail`, data: { id: sent.id, provider: "gmail" } };
+    }
     const cfg = await integrationValues("resend");
     const body = await httpJson("https://api.resend.com/emails", {
       method: "POST",
@@ -165,20 +172,26 @@ export async function executeApproval(approvalId: string): Promise<ExecutionResu
   if (!exec) return { ok: false, message: `No executor for action "${a.action}"` };
   try {
     const result = await exec(a.payload, a);
-    const slug = integrationForAction(a.action, a.payload);
+    const slug = await integrationForAction(a.action, a.payload);
     if (slug && result.ok) await recordIntegrationCheck(slug, true);
     return result;
   } catch (e) {
     if (e instanceof z.ZodError) return { ok: false, message: `Invalid action data: ${e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}` };
     if (e instanceof NotConfigured) return { ok: false, message: e.message };
-    const slug = integrationForAction(a.action, a.payload);
+    const slug = await integrationForAction(a.action, a.payload);
     if (slug) await recordIntegrationCheck(slug, false, (e as Error).message);
     return { ok: false, message: (e as Error).message };
   }
 }
 
-function integrationForAction(action: string, p: Record<string, unknown>) {
-  if (action === "send_email") return "resend";
+async function gmailReady() {
+  const { getIntegrationSecrets, getIntegrationConfig } = await import("../integrations/service");
+  const [s, row] = await Promise.all([getIntegrationSecrets("gmail"), getIntegrationConfig("gmail")]);
+  return !!(s.refreshToken && row?.enabled);
+}
+
+async function integrationForAction(action: string, p: Record<string, unknown>) {
+  if (action === "send_email") return (await gmailReady()) ? "gmail" : "resend";
   if (action === "send_telegram_message") return "telegram";
   if (action === "send_customer_message") return "whatsapp";
   if (action === "publish_social_post") return String(p.platform ?? "").toLowerCase() === "facebook" ? "facebook" : null;
